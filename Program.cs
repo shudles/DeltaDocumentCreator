@@ -20,8 +20,8 @@ namespace DeltaDocumentCreator
         public static async Task Main(string[] args)
         {
             using var psvReader = new PsvReader();
-            var baseline = psvReader.ExtractRecords<FileSystem, CombinedRecord>("act-base.psv", onError: e => Console.WriteLine(e));
-            var current =  psvReader.ExtractRecords<FileSystem, CombinedRecord>("act-update.psv", onError: e => Console.WriteLine(e));
+            var baseline = psvReader.ExtractRecords<FileSystem, CombinedRecord>(args[0], onError: e => Console.WriteLine(e));
+            var current =  psvReader.ExtractRecords<FileSystem, CombinedRecord>(args[1], onError: e => Console.WriteLine(e));
 
             var deltaActions = DeltaCalculator.CalculateDeltaActions<CombinedRecord>(baseline, current);
 
