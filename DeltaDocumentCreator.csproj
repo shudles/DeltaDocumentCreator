@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DataLoaderUtils\src\DataLoadUtils\DataLoadUtils.csproj" />
+    <ProjectReference Include="..\DataLoadUtils\DataLoadUtils.csproj" />
   </ItemGroup>
 
 </Project>
