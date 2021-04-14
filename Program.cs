@@ -1,124 +1,117 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using CsvHelper;
 using CsvHelper.Configuration;
 using CsvHelper.Configuration.Attributes;
+using DataLoaderUtils.IO;
+using DataLoadUtils.Delta;
+using DataLoadUtils.IO;
+using Newtonsoft.Json;
 
 namespace DeltaDocumentCreator
 {
     class Program
     {
-        static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            using var psvReader = new PsvReader();
+            var baseline = psvReader.ExtractRecords<FileSystem, CombinedRecord>("act-base.psv", onError: e => Console.WriteLine(e));
+            var current =  psvReader.ExtractRecords<FileSystem, CombinedRecord>("act-update.psv", onError: e => Console.WriteLine(e));
 
+            var deltaActions = DeltaCalculator.CalculateDeltaActions<CombinedRecord>(baseline, current);
 
+            var createsTask = PsvWriting.WriteAsync<FileSystem, CombinedRecord>("creates.psv", deltaActions.RecordsToCreate);
+            var replaceTask = PsvWriting.WriteAsync<FileSystem, CombinedRecord>("replaces.psv", deltaActions.RecordsToReplace);
+            var removesTask = PsvWriting.WriteAsync<FileSystem, CombinedRecord>("removes.psv", deltaActions.RecordsToRemove);
 
-            DoTheThing<CombinedRecord>(args[0], args[1]);
+            await Task.WhenAll(createsTask, replaceTask, removesTask);
+
+            await File.WriteAllTextAsync("index.html", GenerateHtmlReport<CombinedRecord>(deltaActions));
+            await File.WriteAllTextAsync("summary.geojson", GenerateGeoJson(deltaActions));
         }
 
-        public static void DoTheThing<T>(string currentDatasetFile, string newDatasetFile) where T : IDeltableAgainst<T>
+        public static string GenerateHtmlReport<T>(IDeltaActions<T> deltaActions) where T : IDeltaRecord<T>
         {
-            Console.WriteLine("Loading ...");
-            var currentDatasetLookup = ExtractRecords<T>(currentDatasetFile).ToDictionary(t => t.Key, t => t);
-            Console.WriteLine("Done.");
-
-            var newDatasetRecords =  ExtractRecords<T>(newDatasetFile);
-
-            var adds = new List<T>();
-            var updates = new List<T>();
-
-            Console.WriteLine("Deltering ...");
-            foreach (var newRecord in newDatasetRecords)
-            {
-                if (currentDatasetLookup.Remove(newRecord.Key, out var currentRecord))
-                {
-                    if (currentRecord.IsEquivalentTo(newRecord))
-                    {
-                        // great, nothing to do!
-                    }
-                    else
-                    {
-                        // update
-                        updates.Add(newRecord);
-                    }
-                }
-                else
-                {
-                    adds.Add(newRecord);
-                }
-            }
-            Console.WriteLine("Done.");
-
-            // anything left is a remove,
-            // todo - could copy it out to a list to allowed for GB to collect the records to free up memory for the csv writting
-            var removes = currentDatasetLookup.Keys;
-
-            var psvConfig = new CsvConfiguration(CultureInfo.InvariantCulture);
-            psvConfig.Delimiter = "|";
-            psvConfig.BadDataFound = target =>
-            {
-                Console.WriteLine($"Bad Field in row {target.Row} at index: {target.CurrentIndex}:\n\t {target.Field}");
-            };
-
-            Console.WriteLine("Writting ...");
-            // todo write all 3 async
-            using var addsStreamWritter = new StreamWriter("adds.psv");
-            using var addsWritter = new CsvWriter(addsStreamWritter, psvConfig);
-            
-            addsWritter.WriteHeader<T>();
-            foreach (var add in adds)
-            {
-                addsWritter.WriteRecord(add);
-                addsWritter.NextRecord();
-            }
-            addsWritter.Flush();
-
-            using var updatesStreamWritter = new StreamWriter("updates.psv");
-            using var updatesWritter = new CsvWriter(updatesStreamWritter, psvConfig);
-            updatesWritter.WriteHeader<T>();
-
-            foreach (var update in updates)
-            {
-                updatesWritter.WriteRecord(update);
-                updatesWritter.NextRecord();
-            }
-            updatesWritter.Flush();
-
-            File.WriteAllLines("removes.psv", removes);
-            
-            Console.WriteLine("Done.");
+            const string css = "<style>table {  font-family: arial, sans-serif;  border-collapse: collapse;  width: 100%;}td, th {  border: 1px solid #dddddd;  text-align: left;  padding: 8px;}tr:nth-child(even) {  background-color: #dddddd;}</style>";
+            return $"<html>{css}<body><table><tr><th>Action</th><th>Count</th></tr><tr><td>New Addresses</td><th>{deltaActions.RecordsToCreate.Count()}</td></tr><tr><td>Retired Addresses</td><th>{deltaActions.RecordsToRemove.Count()}</td></tr><tr><td>Updated Addresses</td><th>{deltaActions.RecordsToReplace.Count()}</td></tr></table></body></html>";
         }
 
-
-        public static IEnumerable<T> ExtractRecords<T>(string fileName)
+        public static string GenerateGeoJson(IDeltaActions<CombinedRecord> deltaActions)
         {
-            var psvConfig = new CsvConfiguration(CultureInfo.InvariantCulture);
-            psvConfig.Delimiter = "|";
-            psvConfig.BadDataFound = target =>
-            {
-                Console.WriteLine($"Bad Field in row {target.Row} at index: {target.CurrentIndex}:\n\t {target.Field}");
-            };
-            
-            var streamReader = new StreamReader(fileName);
-            
-            var csvReader = new CsvReader(streamReader, psvConfig);
-            
-            var combinedRecords = csvReader.GetRecords<T>();
-            
-            return combinedRecords;
+            return JsonConvert.SerializeObject(GeoJsonFeatureCollection.FromCombinedRecords(deltaActions));
         }
-        
     }
 
-    public interface IDeltableAgainst<T>
+    public class GeoJsonFeatureCollection
     {
-        [Ignore]
-        string Key { get; }
+        [JsonProperty("type")]
+        public string Type => "FeatureCollection";
 
-        bool IsEquivalentTo(T other) => false;
+        [JsonProperty("features")]
+        public List<GeoJsonFeature> Featrues { get; set; }
+
+        public static GeoJsonFeatureCollection FromCombinedRecords(IDeltaActions<CombinedRecord> actions)
+        {
+            return new GeoJsonFeatureCollection
+            {
+                Featrues = actions.RecordsToCreate.Select(
+                        r => GeoJsonFeature.FromCombinedRecord(r, "#3cc62a", "New")
+                    ).Union(actions.RecordsToRemove.Select(
+                        r => GeoJsonFeature.FromCombinedRecord(r, "#c62a2a", "Retired"))
+                    ).Union(actions.RecordsToReplace.Select(
+                        r => GeoJsonFeature.FromCombinedRecord(r, "#2a75c6", "Updated"))
+                        ).ToList()
+            };
+        }
+    }
+
+    public class GeoJsonFeature
+    {
+        [JsonProperty("type")]
+        public string Type => "Feature";
+
+
+        [JsonProperty("properties")]
+        public Dictionary<string, string> Properties { get; set; }
+
+        [JsonProperty("geometry")]
+        public GeoJsonPoint Geometry { get; set; }
+
+        public static GeoJsonFeature FromCombinedRecord(CombinedRecord record, string colour, string action)
+        {
+            return new GeoJsonFeature
+            {
+                Properties = new Dictionary<string, string> {
+                    {"marker-color", colour},
+                    {"marker-size", "medium"},
+                    {"address", record.DisplayAddress},
+                    {"action", action}
+                },
+                Geometry = GeoJsonPoint.FromCombinedRecord(record)
+            };
+        }
+    }
+
+    public class GeoJsonPoint
+    {
+        [JsonProperty("type")]
+        public string Type => "Point";
+
+        [JsonProperty("coordinates")]
+        public List<double> Coordinates { get; set; }
+
+        public static GeoJsonPoint FromCombinedRecord(CombinedRecord record)
+        {
+            return new GeoJsonPoint
+            {
+                Coordinates = new List<double> { double.Parse(record.Longitude), double.Parse(record.Latitude) },
+
+            };
+        }
     }
 }

@@ -1,11 +1,12 @@
 using System.Collections.Generic;
 using System.Text;
 using CsvHelper.Configuration.Attributes;
+using DataLoadUtils.Delta;
 using static DeltaDocumentCreator.Extensions;
 
 namespace DeltaDocumentCreator
 {
-    public class CombinedRecord : IDeltableAgainst<CombinedRecord>
+    public class CombinedRecord : IDeltaRecord<CombinedRecord>
     {
         public CombinedRecord()
         {
@@ -40,7 +41,7 @@ namespace DeltaDocumentCreator
 
         public override string ToString()
         {
-            return $"{DisplayAddress}|{AddressIdentifier}|{MergeKey}|{ComplexUnitType}|{ComplexUnitIdentifier}|{ComplexLevelType}|{ComplexLevelNumber}|{LotIdentifier}|{StreetNumber1}|{NumberFirst}|{StreetNumber2}|{NumberLast}|{StreetName}|{StreetType}|{StreetSuffix}|{LocalityName}|{StateTerritory}|{Postcode}|{PostalDeliveryNumber}|{PostalDeliveryType}|{Latitude}|{Longitude}|{CadastralIdentifier}|{GeoFeature}|{LocationDescriptor}|{SiteName}|{ComplexUnitTypeDescription}|{ComplexLevelTypeDescription}|{AliasPrincipal}|{StreetAliases}|{LocalityAliases}|{LocalityNeighbours}|{PrimarySecondary}|{GnafStreetLocalityPid}|{GnafLocalityPid}|{StreetTypeDescription}|{Origin}|({string.Join(",", DataSources)})";
+            return $"{DisplayAddress}|{AddressIdentifier}|{ComplexUnitType}|{ComplexUnitIdentifier}|{ComplexLevelType}|{ComplexLevelNumber}|{LotIdentifier}|{StreetNumber1}|{NumberFirst}|{StreetNumber2}|{NumberLast}|{StreetName}|{StreetType}|{StreetSuffix}|{LocalityName}|{StateTerritory}|{Postcode}|{PostalDeliveryNumber}|{PostalDeliveryType}|{Latitude}|{Longitude}|{CadastralIdentifier}|{GeoFeature}|{LocationDescriptor}|{SiteName}|{ComplexUnitTypeDescription}|{ComplexLevelTypeDescription}|{AliasPrincipal}|{StreetAliases}|{LocalityAliases}|{LocalityNeighbours}|{PrimarySecondary}|{GnafStreetLocalityPid}|{GnafLocalityPid}|{StreetTypeDescription}|{Origin}|({string.Join(",", DataSources)})";
         }
 
 
@@ -263,9 +264,6 @@ namespace DeltaDocumentCreator
 
         [Default(null), Name("address_identifier")]
         public string AddressIdentifier { get; set; }
-        
-        [Default(null), Name("merge_key")]
-        public string MergeKey { get; set; }
 
         [Default(null), Name("complex_unit_type")]
         public string ComplexUnitType { get; set; }
@@ -375,10 +373,10 @@ namespace DeltaDocumentCreator
         [Ignore]
         public string Key => AddressIdentifier;
 
-        public bool IsEquivalentTo(CombinedRecord other)
+        public bool RequiresReplace(CombinedRecord other)
         {
             // other stuff matters like lat long
-            return MergeKey == other.MergeKey;
+            return DisplayAddress == other.DisplayAddress;
         }
     }
 }
