@@ -32,7 +32,7 @@ namespace DeltaDocumentCreator
             await Task.WhenAll(createsTask, replaceTask, removesTask);
 
             await File.WriteAllTextAsync("index.html", GenerateHtmlReport<CombinedRecord>(deltaActions));
-            //await File.WriteAllTextAsync("summary.geojson", GenerateGeoJson(deltaActions));
+            await File.WriteAllTextAsync("summary.geojson", GenerateGeoJson(deltaActions));
         }
 
         public static string GenerateHtmlReport<T>(IDeltaActions<T> deltaActions) where T : IDeltaRecord<T>
@@ -109,6 +109,10 @@ namespace DeltaDocumentCreator
         {
             return new GeoJsonPoint
             {
+                var lon = 0;
+                var lat = 0;
+                double.TryParse(record.Longitude, out lon);
+                double.TryParse(record.Latitude, out lat);
                 Coordinates = new List<double> { double.Parse(record.Longitude), double.Parse(record.Latitude) },
 
             };
