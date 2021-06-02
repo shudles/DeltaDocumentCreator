@@ -32,7 +32,7 @@ namespace DeltaDocumentCreator
             await Task.WhenAll(createsTask, replaceTask, removesTask);
 
             await File.WriteAllTextAsync("index.html", GenerateHtmlReport<CombinedRecord>(deltaActions));
-            await File.WriteAllTextAsync("summary.geojson", GenerateGeoJson(deltaActions));
+            //await File.WriteAllTextAsync("summary.geojson", GenerateGeoJson(deltaActions));
         }
 
         public static string GenerateHtmlReport<T>(IDeltaActions<T> deltaActions) where T : IDeltaRecord<T>
