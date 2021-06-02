@@ -107,13 +107,13 @@ namespace DeltaDocumentCreator
 
         public static GeoJsonPoint FromCombinedRecord(CombinedRecord record)
         {
+            var lon = 0;
+            var lat = 0;
+            double.TryParse(record.Longitude, out lon);
+            double.TryParse(record.Latitude, out lat);
             return new GeoJsonPoint
             {
-                var lon = 0;
-                var lat = 0;
-                double.TryParse(record.Longitude, out lon);
-                double.TryParse(record.Latitude, out lat);
-                Coordinates = new List<double> { double.Parse(record.Longitude), double.Parse(record.Latitude) },
+                Coordinates = new List<double> { lon, lat },
 
             };
         }
